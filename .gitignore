@@ -9,3 +9,6 @@ reports/output/
 pytest_results.json
 audit_report.*
 *.egg-info/
+reports/*.md
+reports/*.html
+pytest_results.json
