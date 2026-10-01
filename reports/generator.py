@@ -41,9 +41,21 @@ def summarize(records: list[AuditRecord]) -> dict[str, Any]:
 _STATUS_ORDER = {"Vulnerable": 0, "Error": 1, "Mitigated": 2}
 
 
+def _slim_trace(trace: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Drop `raw` copies that duplicate the normalized tool_calls (kept if nothing parsed)."""
+    if not trace:
+        return trace
+    raw = trace.get("raw") or {}
+    unparsed = not trace.get("tool_calls") and "tool_calls" not in raw  # keep raw as evidence only then
+    slim = {k: v for k, v in trace.items() if k != "raw" or unparsed}
+    slim["tool_calls"] = [{k: v for k, v in c.items() if k != "raw"} for c in trace.get("tool_calls", [])]
+    return slim
+
+
 def _sorted(records: list[AuditRecord]) -> list[AuditRecord]:
-    """Vulnerable findings first, then errors, then mitigated; stable within each group."""
-    return sorted(records, key=lambda r: _STATUS_ORDER.get(r.status, 3))
+    """Vulnerable first, then errors, then mitigated (stable); traces slimmed for display."""
+    ordered = sorted(records, key=lambda r: _STATUS_ORDER.get(r.status, 3))
+    return [r.model_copy(update={"raw_trace": _slim_trace(r.raw_trace)}) for r in ordered]
 
 
 class ReportGenerator:
