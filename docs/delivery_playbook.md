@@ -91,12 +91,13 @@ done
 python3 -c "import json, sys; d = {}; [d.update({r['case_id']: r for r in json.load(open(f))}) for f in sys.argv[1:-1]]; json.dump(list(d.values()), open(sys.argv[-1], 'w'), indent=2)" reports/runs/results_*.json pytest_results.json
 ```
 
-If the target returns HTTP 429:
+`core/client.py` automatically retries HTTP 429, 503 and 504 responses (and network timeouts/resets): up to 3 attempts in total (2 retries), with jittered exponential backoff of roughly 2 s then 4 s, capped at 10 s. Transient throttling needs no manual action.
 
-- [ ] Log every 429 with timestamp, endpoint, and case ID in the engagement log.
-- [ ] The harness does not retry automatically: a 429 surfaces as an Error result for that case.
-- [ ] Throttle by splitting runs by class (see above).
-- [ ] Wait with exponential backoff (1 s doubling to a 30 s cap), then re-run only the errored case IDs, e.g. `pytest suites/test_cases.py -k "INJ-003 or ARG-002"`, and merge results as above.
+If a case still fails after its retries, the client raises `TargetAgentUnavailableError` and the case appears as Error in the report:
+
+- [ ] Log the case ID, endpoint and timestamp in the engagement log.
+- [ ] Throttle by splitting runs by class (see above) if errors are widespread.
+- [ ] Wait for the target to recover, then re-run only the errored case IDs, e.g. `pytest suites/test_cases.py -k "INJ-004 or ARG-003"`, and merge results as above. This manual step is only required for cases that exhausted their retries.
 - [ ] Do not hammer the target or modify the rate-limit configuration.
 - [ ] Preserve all raw trace output in `reports/output`.
 

@@ -23,10 +23,10 @@
    ./scripts/run_audit.sh suites/test_cases.py reports/client_audit_report.md
    ```
    The script deletes stale results, runs the suite, and writes the Markdown and HTML report. It exits non-zero when any case is Vulnerable; that is expected, not a script failure.
-3. **429 / backoff handling.** The harness does not retry; a 429 appears as an Error result for that case.
-   - [ ] Log each 429 (time, case ID) in the engagement log.
-   - [ ] Wait with exponential backoff (1 s doubling to a 30 s cap).
-   - [ ] Re-run only the affected cases, then merge, because every pytest run overwrites `pytest_results.json`:
+3. **429 / backoff handling.** `core/client.py` automatically retries 429, 503 and 504 responses (and network timeouts/resets): up to 3 attempts in total (2 retries) with jittered exponential backoff, roughly 2 s then 4 s, capped at 10 s. No manual action is needed for transient throttling.
+   - [ ] Manual re-run is required only when a case exhausts its retries: the client raises `TargetAgentUnavailableError` and the case shows as Error in the report. Log it (time, case ID) in the engagement log.
+   - [ ] If many cases error this way, wait for the target to recover (or ask the client to raise rate limits) before re-running.
+   - [ ] Re-run only the errored cases (e.g. `-k "INJ-004 or ARG-003"`), then merge, because every pytest run overwrites `pytest_results.json`:
    ```bash
    cp pytest_results.json reports/run_full.json          # save the full run first
    pytest suites/test_cases.py -k "INJ-004 or ARG-003" -v
