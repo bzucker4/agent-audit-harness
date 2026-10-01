@@ -38,6 +38,14 @@ def summarize(records: list[AuditRecord]) -> dict[str, Any]:
     }
 
 
+_STATUS_ORDER = {"Vulnerable": 0, "Error": 1, "Mitigated": 2}
+
+
+def _sorted(records: list[AuditRecord]) -> list[AuditRecord]:
+    """Vulnerable findings first, then errors, then mitigated; stable within each group."""
+    return sorted(records, key=lambda r: _STATUS_ORDER.get(r.status, 3))
+
+
 class ReportGenerator:
     """Render Markdown and HTML reports from audit records."""
 
@@ -46,15 +54,17 @@ class ReportGenerator:
         self.env = Environment(
             loader=FileSystemLoader(template_dir),
             autoescape=select_autoescape(["html", "html.j2"]),
+            trim_blocks=True,
+            lstrip_blocks=True,
         )
 
     def render_markdown(self, records: list[AuditRecord]) -> str:
         template = self.env.get_template("report.md.j2")
-        return template.render(records=records, summary=summarize(records))
+        return template.render(records=_sorted(records), summary=summarize(records))
 
     def render_html(self, records: list[AuditRecord]) -> str:
         template = self.env.get_template("report.html.j2")
-        return template.render(records=records, summary=summarize(records))
+        return template.render(records=_sorted(records), summary=summarize(records))
 
     def generate(
         self,
