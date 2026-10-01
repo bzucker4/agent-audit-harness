@@ -7,9 +7,32 @@ from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel
+from tenacity import Retrying, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
 
 from core.config import Endpoint, TargetConfig
 from core.models import Trace, parse_trace
+
+
+RETRYABLE_STATUS = frozenset({429, 503, 504})
+
+
+class TargetAgentUnavailableError(RuntimeError):
+    """The target agent stayed unreachable or throttled after all retry attempts."""
+
+    def __init__(self, message: str, url: str, attempts: int, status_code: int | None = None):
+        super().__init__(message)
+        self.url = url
+        self.attempts = attempts
+        self.status_code = status_code
+
+
+class _Transient(Exception):
+    """Internal marker for a retryable failure (429/503/504 or a network error)."""
+
+    def __init__(self, reason: str, status_code: int | None = None):
+        super().__init__(reason)
+        self.reason = reason
+        self.status_code = status_code
 
 
 class TurnResult(BaseModel):
@@ -24,8 +47,19 @@ class TurnResult(BaseModel):
 class AgentClient:
     """HTTP client wrapper for interacting with the target agent's API."""
 
-    def __init__(self, config: TargetConfig, user: str = "user_a", client: httpx.Client | None = None):
+    def __init__(
+        self,
+        config: TargetConfig,
+        user: str = "user_a",
+        client: httpx.Client | None = None,
+        max_attempts: int = 3,
+        backoff_initial: float = 2.0,
+        backoff_max: float = 10.0,
+    ):
         self.config = config
+        self.max_attempts = max_attempts
+        self.backoff_initial = backoff_initial
+        self.backoff_max = backoff_max
         self.user = user
         self.captured: list[dict[str, Any]] = []
         self._client = client or httpx.Client(timeout=config.timeout)
@@ -68,6 +102,27 @@ class AgentClient:
         headers = kwargs.pop("headers", {})
         headers.update(self._headers(user))
 
+        retrying = Retrying(
+            retry=retry_if_exception_type(_Transient),
+            stop=stop_after_attempt(self.max_attempts),
+            wait=wait_exponential_jitter(initial=self.backoff_initial, max=self.backoff_max, jitter=1),
+            reraise=True,
+        )
+        try:
+            for attempt in retrying:
+                with attempt:
+                    return self._send_once(method, url, headers, kwargs)
+        except _Transient as exc:
+            raise TargetAgentUnavailableError(
+                f"Target agent unavailable after {self.max_attempts} attempts: {method} {url} ({exc.reason})",
+                url=url,
+                attempts=self.max_attempts,
+                status_code=exc.status_code,
+            ) from exc
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def _send_once(self, method: str, url: str, headers: dict[str, str], kwargs: dict[str, Any]) -> httpx.Response:
+        """One attempt: build (fresh body stream), capture, send. Raises _Transient when retryable."""
         request = self._client.build_request(method, url, headers=headers, **kwargs)
         capture_request = {
             "method": method,
@@ -75,13 +130,19 @@ class AgentClient:
             "headers": dict(request.headers),
             "body": request.read().decode(errors="replace")[:5000],
         }
-        response = self._client.send(request)
+        try:
+            response = self._client.send(request)
+        except httpx.TransportError as exc:  # timeouts, connection resets, DNS failures
+            self.captured.append({"request": capture_request, "response": {"error": repr(exc)}})
+            raise _Transient(f"{type(exc).__name__}: {exc}") from exc
         capture_response = {
             "status": response.status_code,
             "headers": dict(response.headers),
             "body": response.text[:5000],
         }
         self.captured.append({"request": capture_request, "response": capture_response})
+        if response.status_code in RETRYABLE_STATUS:
+            raise _Transient(f"HTTP {response.status_code}", response.status_code)
         response.raise_for_status()
         return response
 
