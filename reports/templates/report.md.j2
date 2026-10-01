@@ -1,0 +1,56 @@
+# Agent Tool-Abuse Audit Report
+
+## Executive Summary
+
+**Total findings:** {{ summary.total }}
+
+| Status | Count |
+| --- | --- |
+| Vulnerable | {{ summary.status_counts.get('Vulnerable', 0) }} |
+| Mitigated | {{ summary.status_counts.get('Mitigated', 0) }} |
+| Error | {{ summary.status_counts.get('Error', 0) }} |
+
+| Attack Class | Count |
+| --- | --- |
+{% for attack, count in summary.attack_counts.items() %}
+| {{ attack }} | {{ count }} |
+{% endfor %}
+
+## Findings
+
+{% for record in records %}
+### {{ record.case_id }} - {{ record.test_name }}
+
+- **Test:** {{ record.test_name }}
+- **Attack Class:** {{ record.attack_class }}
+- **OWASP:** {{ record.owasp }}
+- **Status:** {{ record.status }}
+- **Description:** {{ record.description }}
+
+#### Raw Trace
+
+```json
+{{ record.raw_trace | tojson(indent=2) }}
+```
+
+#### Remediation Ticket
+
+**Title:** Remediate {{ record.attack_class }} in {{ record.test_name }}
+
+**Priority:** High
+
+**Description:**
+
+{{ record.description }}
+
+**Remediation:**
+
+{{ record.remediation }}
+
+**Acceptance Criteria:**
+
+- [ ] Tool policy prevents the vulnerable tool call or argument pattern from occurring.
+- [ ] The fixed-scope guardrails are enforced before any outbound request.
+- [ ] Regression test {{ record.case_id }} passes (Mitigated) in the audit suite.
+
+{% endfor %}

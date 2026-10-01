@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-audit-harness"
+version = "0.1.0"
+description = "Automated Agent Tool-Abuse Audit Suite for authorized, fixed-scope security audits"
+requires-python = ">=3.11"
+dependencies = [
+  "pytest",
+  "pydantic>=2",
+  "httpx",
+  "jinja2",
+  "pyyaml",
+  "fastapi",
+  "uvicorn",
+  "python-multipart",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["suites"]
+python_files = ["test_*.py"]
+addopts = "-p reports.plugin --audit-report-dir reports/output"
+markers = [
+  "indirect_injection: Indirect prompt injection attack suite",
+  "confused_deputy: Confused deputy / BOLA attack suite",
+  "argument_injection: Argument injection attack suite",
+  "multistep_exfiltration: Multistep sensitive data exfiltration suite",
+  "mcp_poisoning: MCP supply-chain and tool poisoning suite",
+]
+
+[tool.setuptools.packages.find]
+include = ["core*", "suites*", "reports*"]

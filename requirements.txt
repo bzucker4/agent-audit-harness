@@ -1,0 +1,8 @@
+pytest
+pydantic>=2
+httpx
+jinja2
+pyyaml
+fastapi
+uvicorn
+python-multipart
