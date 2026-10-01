@@ -87,7 +87,8 @@ for c in INJ TFC ARG CDP MSE; do
   pytest suites/test_cases.py -k "$c"
   cp pytest_results.json "reports/runs/results_$c.json"
 done
-jq -s 'add' reports/runs/results_*.json > pytest_results.json
+# Merge (later files win on duplicate case_id): inputs..., then output
+python3 -c "import json, sys; d = {}; [d.update({r['case_id']: r for r in json.load(open(f))}) for f in sys.argv[1:-1]]; json.dump(list(d.values()), open(sys.argv[-1], 'w'), indent=2)" reports/runs/results_*.json pytest_results.json
 ```
 
 If the target returns HTTP 429:
