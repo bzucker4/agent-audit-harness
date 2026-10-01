@@ -8,3 +8,4 @@ reports/output/
 *.pyc
 pytest_results.json
 audit_report.*
+*.egg-info/
