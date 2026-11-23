@@ -1,5 +1,7 @@
 # Agent Tool-Abuse Audit Suite
 
+**Free pre-check:** paste your system prompt, rule file or MCP config into the [Agent Security Scorecard](https://bzucker4.github.io/agent-audit-harness/scorecard/). It runs in your browser and sends nothing anywhere. See also the [sample audit report](https://bzucker4.github.io/agent-audit-harness/).
+
 Automated security audit harness for tool-using LLM agents. It runs fixed-scope,
 canary-based attack cases and renders an audit report.
 
